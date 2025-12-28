@@ -75,13 +75,13 @@ export default function Notifications() {
   }, [data, filter]);
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-        <div className="mx-auto max-w-3xl px-4 py-4 flex items-center gap-3">
+    <main className="min-h-screen bg-white pb-20">
+      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b">
+        <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3">
           <Bell className="h-5 w-5" />
           <h1 className="text-xl font-semibold">알림</h1>
         </div>
-        <div className="mx-auto max-w-3xl px-4 pb-3">
+        <div className="mx-auto max-w-2xl px-4 pb-3">
           <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
             <TabsList className="grid grid-cols-4 w-full">
               {Object.entries(typeMap).map(([key, cfg]) => (
@@ -95,7 +95,7 @@ export default function Notifications() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-3xl px-4 py-4 space-y-3">
+      <section className="mx-auto max-w-2xl px-4 py-4 space-y-3">
         {isLoading && (
           <Card className="p-6 text-center text-muted-foreground">불러오는 중…</Card>
         )}

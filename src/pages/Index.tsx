@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Search, Flame, Target, TrendingUp, Play } from "lucide-react";
+import { Search, Flame, Target, TrendingUp, Play, CheckCircle, Circle, Sun, Moon, Plus, Compass, Users, BookOpen } from "lucide-react";
 
 interface TalkRoom {
   id: string;
@@ -24,6 +24,9 @@ interface DailyStats {
   totalMissions: number;
   completedMissions: number;
   streak: number;
+  todayMorningPromise: boolean;
+  todayEveningReview: boolean;
+  weeklyCompletionRate: number;
 }
 
 const Index = () => {
@@ -40,16 +43,32 @@ const Index = () => {
     queryKey: ["daily-stats", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // 전체 로그
       const { data: logs, error } = await supabase
         .from("daily_logs")
-        .select("id, log_date")
+        .select("id, log_date, morning_promise, evening_review")
         .eq("user_id", user!.id)
         .order("log_date", { ascending: false });
 
       if (error) throw error;
 
       const totalMissions = logs?.length || 0;
-      const completedMissions = logs?.filter(log => log.log_date).length || 0;
+      const completedMissions = logs?.filter(log => log.evening_review).length || 0;
+
+      // 오늘의 다짐/성과 확인
+      const todayLog = logs?.find(log => log.log_date === today);
+      const todayMorningPromise = !!todayLog?.morning_promise;
+      const todayEveningReview = !!todayLog?.evening_review;
+
+      // 주간 완료율
+      const weeklyLogs = logs?.filter(log => log.log_date >= weekAgo) || [];
+      const weeklyCompleted = weeklyLogs.filter(log => log.evening_review).length;
+      const weeklyCompletionRate = weeklyLogs.length > 0
+        ? Math.round((weeklyCompleted / weeklyLogs.length) * 100)
+        : 0;
 
       const { data: userData } = await supabase
         .from("users")
@@ -60,7 +79,10 @@ const Index = () => {
       return {
         totalMissions,
         completedMissions,
-        streak: userData?.streak_days || 0
+        streak: userData?.streak_days || 0,
+        todayMorningPromise,
+        todayEveningReview,
+        weeklyCompletionRate
       } as DailyStats;
     }
   });
@@ -106,83 +128,145 @@ const Index = () => {
     }
   });
 
-  const sampleRooms: TalkRoom[] = [
-    {
-      id: "sample-1",
-      title: "아토믹 해빗",
-      description: "작은 습관이 만드는 큰 변화",
-      media_type: "book",
-      price_cents: 1500000,
-      price_currency: "KRW",
-      capacity: 8,
-      host_id: "sample-host-1",
-      starts_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      keywords: ["습관", "자기계발"],
-      is_public: true
-    },
-    {
-      id: "sample-2",
-      title: "미라클 모닝",
-      description: "성공하는 사람들의 아침 루틴",
-      media_type: "book",
-      price_cents: 1200000,
-      price_currency: "KRW",
-      capacity: 6,
-      host_id: "sample-host-2",
-      starts_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-      keywords: ["루틴", "생산성"],
-      is_public: true
-    },
-    {
-      id: "sample-3",
-      title: "사피엔스",
-      description: "인류 문명의 역사",
-      media_type: "book",
-      price_cents: 1800000,
-      price_currency: "KRW",
-      capacity: 10,
-      host_id: "sample-host-3",
-      starts_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      keywords: ["역사", "인문학"],
-      is_public: true
-    }
-  ];
-
-  const roomsToShow = recommendedRooms && recommendedRooms.length > 0 ? recommendedRooms : sampleRooms;
+  const roomsToShow = recommendedRooms || [];
 
   return (
     <div className="min-h-screen bg-white pb-20">
       <div className="max-w-2xl mx-auto px-8 py-8">
+        {/* Hero Section with Action Buttons */}
+        <div className="mb-12">
+          <h1 className="text-3xl font-bold mb-2">TALKROOM</h1>
+          <p className="text-gray-500 mb-8">실행 중심 북클럽에 오신 것을 환영합니다</p>
+
+          {/* Main Action Buttons */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <button
+              onClick={() => navigate("/create-room")}
+              className="p-6 border-2 border-primary bg-primary text-white rounded-xl hover:bg-primary/90 transition-all duration-200 transform hover:scale-105 active:scale-95"
+            >
+              <Plus className="w-6 h-6 mx-auto mb-2" />
+              <div className="font-semibold">토크룸 만들기</div>
+              <div className="text-xs opacity-90 mt-1">호스트로 시작하기</div>
+            </button>
+            <button
+              onClick={() => navigate("/explore")}
+              className="p-6 border-2 border-gray-300 rounded-xl hover:border-primary hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 active:scale-95"
+            >
+              <Compass className="w-6 h-6 mx-auto mb-2" />
+              <div className="font-semibold">토크룸 찾기</div>
+              <div className="text-xs text-gray-500 mt-1">관심사 탐색하기</div>
+            </button>
+          </div>
+
+          {/* Secondary Action Buttons */}
+          {user && (
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => navigate("/my-rooms")}
+                className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                <Users className="w-5 h-5 mx-auto mb-1 text-gray-600" />
+                <div className="text-sm font-medium">내 토크룸</div>
+                {myRooms && myRooms.length > 0 && (
+                  <div className="text-xs text-gray-500 mt-1">{myRooms.length}개 참여 중</div>
+                )}
+              </button>
+              <button
+                onClick={() => navigate("/daily")}
+                className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                <BookOpen className="w-5 h-5 mx-auto mb-1 text-gray-600" />
+                <div className="text-sm font-medium">오늘의 미션</div>
+                {stats && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {stats.todayMorningPromise && stats.todayEveningReview ? '완료' : '진행 중'}
+                  </div>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Stats Section - Only show if user is logged in */}
         {user && stats && (
-          <div className="mb-12">
-            <h2 className="text-xl font-semibold mb-6">오늘의 현황</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="w-4 h-4 text-primary" />
-                  <span className="text-xs text-gray-500">완료</span>
+          <div className="mb-12 space-y-6">
+            {/* 오늘의 미션 */}
+            <div>
+              <h2 className="text-xl font-semibold mb-4">오늘의 미션</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    stats.todayMorningPromise
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => navigate("/daily")}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sun className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm font-medium">아침 다짐</span>
+                    {stats.todayMorningPromise ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-gray-300 ml-auto" />
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {stats.todayMorningPromise ? '완료!' : '오늘의 다짐을 작성하세요'}
+                  </p>
                 </div>
-                <div className="text-2xl font-semibold">{stats.completedMissions}</div>
-                <div className="text-xs text-gray-400">/ {stats.totalMissions} 미션</div>
+                <div
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    stats.todayEveningReview
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => navigate("/daily")}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Moon className="w-4 h-4 text-indigo-500" />
+                    <span className="text-sm font-medium">저녁 성과</span>
+                    {stats.todayEveningReview ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-gray-300 ml-auto" />
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {stats.todayEveningReview ? '완료!' : '오늘의 성과를 기록하세요'}
+                  </p>
+                </div>
               </div>
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-warning" />
-                  <span className="text-xs text-gray-500">연속</span>
+            </div>
+
+            {/* 통계 요약 */}
+            <div>
+              <h2 className="text-xl font-semibold mb-4">나의 현황</h2>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Flame className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs text-gray-500">연속</span>
+                  </div>
+                  <div className="text-2xl font-semibold">{stats.streak}</div>
+                  <div className="text-xs text-gray-400">일</div>
                 </div>
-                <div className="text-2xl font-semibold">{stats.streak}</div>
-                <div className="text-xs text-gray-400">일</div>
-              </div>
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-4 h-4 text-success" />
-                  <span className="text-xs text-gray-500">달성률</span>
+                <div className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs text-gray-500">누적</span>
+                  </div>
+                  <div className="text-2xl font-semibold">{stats.completedMissions}</div>
+                  <div className="text-xs text-gray-400">/ {stats.totalMissions}</div>
                 </div>
-                <div className="text-2xl font-semibold">
-                  {stats.totalMissions > 0 ? Math.round((stats.completedMissions / stats.totalMissions) * 100) : 0}
+                <div className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                    <span className="text-xs text-gray-500">주간</span>
+                  </div>
+                  <div className="text-2xl font-semibold">{stats.weeklyCompletionRate}</div>
+                  <div className="text-xs text-gray-400">%</div>
                 </div>
-                <div className="text-xs text-gray-400">%</div>
               </div>
             </div>
           </div>

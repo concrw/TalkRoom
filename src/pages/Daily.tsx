@@ -192,10 +192,11 @@ export default function Daily() {
   if (!course) return null;
 
   return (
-    <main className="min-h-screen p-6">
-      <h1 className="text-2xl font-semibold mb-4">일일 기록</h1>
+    <main className="min-h-screen bg-white pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <h1 className="text-2xl font-semibold mb-4">일일 기록</h1>
 
-      <section className="max-w-4xl space-y-4">
+        <section className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">진행률</CardTitle>
@@ -208,7 +209,7 @@ export default function Daily() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">아침 다짐 (본인만 조회)</CardTitle>
@@ -253,7 +254,8 @@ export default function Daily() {
             </CardContent>
           </Card>
         </div>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

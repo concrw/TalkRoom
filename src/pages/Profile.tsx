@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
-import { 
-  User, Award, TrendingUp, Target, Calendar, Clock, 
-  BookOpen, Dumbbell, Brain, Palette, Settings, 
+import {
+  User, Award, TrendingUp, Target,
+  BookOpen, Dumbbell, Brain,
   Bell, Lock, CreditCard, Download, Trash2, Star,
-  Flame, Heart, Trophy, Crown, Sunrise, MessageCircle,
-  ChevronRight, Edit3, BarChart3, PieChart, LineChart,
-  Gift, Zap, Coffee, Moon, CheckCircle, AlertCircle,
+  Flame, Trophy,
+  ChevronRight, Edit3,
+  Gift, Loader2,
   LucideIcon
 } from 'lucide-react';
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 // 인터페이스 정의
 interface UserProfile {
@@ -40,16 +43,6 @@ interface Badge {
   progress?: number;
   target?: number;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
-}
-
-interface Challenge {
-  id: number;
-  title: string;
-  description: string;
-  progress: number;
-  target: number;
-  deadline: string;
-  reward: string;
 }
 
 interface WeeklyDay {
@@ -95,14 +88,81 @@ interface BadgeCardProps {
   badge: Badge;
 }
 
-interface ChallengeCardProps {
-  challenge: Challenge;
-}
-
 export default function Profile() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('week');
   const [showBadgeDetail, setShowBadgeDetail] = useState<Badge | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 알림 설정
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState({
+    morningReminder: true,
+    morningTime: '07:00',
+    eveningReminder: true,
+    eveningTime: '21:00',
+    cheerNotification: true,
+    systemNotification: true
+  });
+
+  // 알림 설정 로드
+  useEffect(() => {
+    const saved = localStorage.getItem('notificationSettings');
+    if (saved) {
+      setNotificationSettings(JSON.parse(saved));
+    }
+  }, []);
+
+  // 알림 설정 저장
+  const handleSaveNotifications = () => {
+    localStorage.setItem('notificationSettings', JSON.stringify(notificationSettings));
+    toast({ title: "저장 완료", description: "알림 설정이 저장되었습니다." });
+    setShowNotificationSettings(false);
+  };
+
+  // 사용자 기본 정보
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: '',
+    nickname: '',
+    bio: '',
+    level: 1,
+    currentExp: 0,
+    nextLevelExp: 100,
+    joinDate: '',
+    consecutiveDays: 0,
+    profileImage: null
+  });
+
+  // 핵심 지표
+  const [coreStats, setCoreStats] = useState<CoreStats>({
+    executionRate: 0,
+    completionRate: 0,
+    streak: 0,
+    level: 1,
+    totalExperience: 0
+  });
+
+  // 상세 통계
+  const [detailedStats, setDetailedStats] = useState<DetailedStats>({
+    totalPromises: 0,
+    completedPromises: 0,
+    totalTrainings: 0,
+    completedTrainings: 0,
+    totalTalkrooms: 0,
+    supportMessages: { sent: 0, received: 0 },
+    categories: {
+      exercise: { completed: 0, total: 0, rate: 0 },
+      reading: { completed: 0, total: 0, rate: 0 },
+      meditation: { completed: 0, total: 0, rate: 0 },
+      learning: { completed: 0, total: 0, rate: 0 }
+    }
+  });
 
   useEffect(() => {
     document.title = "프로필 - TALKROOM";
@@ -110,146 +170,410 @@ export default function Profile() {
     if (meta) meta.setAttribute("content", "나의 실행 여정과 성취를 확인하세요.");
   }, []);
 
-  // 사용자 기본 정보
-  const [userProfile] = useState<UserProfile>({
-    name: '김하늘',
-    nickname: 'SkyRunner',
-    bio: '실행력으로 인생을 바꾸는 중 💪',
-    level: 12,
-    currentExp: 1850,
-    nextLevelExp: 2000,
-    joinDate: '2024-03-15',
-    consecutiveDays: 7,
-    profileImage: null
-  });
+  // 프로필 및 통계 데이터 로드
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      if (!user?.id) {
+        setIsLoading(false);
+        return;
+      }
 
-  // 핵심 지표
-  const [coreStats] = useState<CoreStats>({
-    executionRate: 85,
-    completionRate: 92,
-    streak: 7,
-    level: 12,
-    totalExperience: 1850
-  });
+      setIsLoading(true);
+      try {
+        // 1. 사용자 기본 정보
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle();
 
-  // 상세 통계
-  const [detailedStats] = useState<DetailedStats>({
-    totalPromises: 45,
-    completedPromises: 38,
-    totalTrainings: 12,
-    completedTrainings: 11,
-    totalTalkrooms: 8,
-    supportMessages: { sent: 89, received: 67 },
-    categories: {
-      exercise: { completed: 15, total: 18, rate: 83 },
-      reading: { completed: 12, total: 14, rate: 86 },
-      meditation: { completed: 8, total: 10, rate: 80 },
-      learning: { completed: 3, total: 5, rate: 60 }
+        if (userError) throw userError;
+
+        if (userData) {
+          setUserProfile({
+            name: userData.name || '사용자',
+            nickname: userData.name || '사용자',
+            bio: userData.bio || '아직 자기소개가 없습니다.',
+            level: userData.level || 1,
+            currentExp: (userData.level || 1) * 100 - 50,
+            nextLevelExp: (userData.level || 1) * 100,
+            joinDate: userData.created_at?.split('T')[0] || '',
+            consecutiveDays: userData.streak_days || 0,
+            profileImage: userData.avatar_url
+          });
+
+          setCoreStats(prev => ({
+            ...prev,
+            streak: userData.streak_days || 0,
+            level: userData.level || 1,
+            totalExperience: (userData.level || 1) * 100
+          }));
+        }
+
+        // 2. 참여 토크룸 수
+        const { count: roomCount } = await supabase
+          .from("room_participants")
+          .select("*", { count: 'exact', head: true })
+          .eq("user_id", user.id);
+
+        // 3. 완료한 훈련 코스 수
+        const { data: coursesData } = await supabase
+          .from("training_courses")
+          .select("id")
+          .eq("user_id", user.id);
+
+        // 4. 일일 로그 통계
+        const { data: logsData } = await supabase
+          .from("daily_logs")
+          .select("morning_promise, evening_review")
+          .eq("user_id", user.id);
+
+        const totalPromises = logsData?.filter(l => l.morning_promise).length || 0;
+        const completedPromises = logsData?.filter(l => l.evening_review).length || 0;
+        const executionRate = totalPromises > 0 ? Math.round((completedPromises / totalPromises) * 100) : 0;
+        const streakDays = userData?.streak_days || 0;
+
+        // 5. 카테고리별 통계 (참여한 토크룸의 keywords 기반)
+        const { data: participatedRooms } = await supabase
+          .from("room_participants")
+          .select("room_id")
+          .eq("user_id", user.id);
+
+        const roomIds = (participatedRooms || []).map(p => p.room_id);
+
+        let categoryStats = {
+          exercise: { completed: 0, total: 0, rate: 0 },
+          reading: { completed: 0, total: 0, rate: 0 },
+          meditation: { completed: 0, total: 0, rate: 0 },
+          learning: { completed: 0, total: 0, rate: 0 }
+        };
+
+        if (roomIds.length > 0) {
+          const { data: roomsData } = await supabase
+            .from("talk_rooms")
+            .select("keywords")
+            .in("id", roomIds);
+
+          // 키워드 기반 카테고리 분류
+          const exerciseKeywords = ['운동', '헬스', '피트니스', '달리기', '요가', 'exercise', 'fitness', 'gym'];
+          const readingKeywords = ['독서', '책', '읽기', '문학', 'book', 'reading'];
+          const meditationKeywords = ['명상', '마음챙김', 'mindfulness', 'meditation', '수면', '힐링'];
+          const learningKeywords = ['학습', '공부', '영어', '개발', '코딩', '자기계발', 'learning', 'study'];
+
+          (roomsData || []).forEach(room => {
+            const keywords = (room.keywords || []).map((k: string) => k.toLowerCase());
+
+            if (keywords.some((k: string) => exerciseKeywords.some(ek => k.includes(ek)))) {
+              categoryStats.exercise.total++;
+              categoryStats.exercise.completed++;
+            }
+            if (keywords.some((k: string) => readingKeywords.some(rk => k.includes(rk)))) {
+              categoryStats.reading.total++;
+              categoryStats.reading.completed++;
+            }
+            if (keywords.some((k: string) => meditationKeywords.some(mk => k.includes(mk)))) {
+              categoryStats.meditation.total++;
+              categoryStats.meditation.completed++;
+            }
+            if (keywords.some((k: string) => learningKeywords.some(lk => k.includes(lk)))) {
+              categoryStats.learning.total++;
+              categoryStats.learning.completed++;
+            }
+          });
+
+          // 비율 계산
+          Object.keys(categoryStats).forEach(key => {
+            const cat = categoryStats[key as keyof typeof categoryStats];
+            cat.rate = cat.total > 0 ? Math.round((cat.completed / cat.total) * 100) : 0;
+          });
+        }
+
+        // 레벨 계산
+        const levelData = calculateLevel(totalPromises, completedPromises, streakDays);
+
+        // 프로필에 레벨 정보 업데이트
+        setUserProfile(prev => ({
+          ...prev,
+          level: levelData.level,
+          currentExp: levelData.currentExp,
+          nextLevelExp: levelData.nextLevelExp
+        }));
+
+        // 6. 보낸 응원 메시지 수 (feed_posts의 좋아요)
+        const { count: sentLikes } = await supabase
+          .from("post_likes")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        setDetailedStats({
+          totalPromises,
+          completedPromises,
+          totalTrainings: coursesData?.length || 0,
+          completedTrainings: coursesData?.length || 0,
+          totalTalkrooms: roomCount || 0,
+          supportMessages: { sent: sentLikes || 0, received: 0 },
+          categories: categoryStats
+        });
+
+        setCoreStats(prev => ({
+          ...prev,
+          executionRate,
+          completionRate: coursesData?.length ? 100 : 0,
+          streak: streakDays,
+          level: levelData.level,
+          totalExperience: levelData.totalExp
+        }));
+
+        // 배지 달성 여부 계산
+        calculateBadges(
+          totalPromises,
+          userData?.streak_days || 0,
+          coursesData?.length || 0,
+          roomCount || 0
+        );
+
+        // 7. 주간 실행 패턴 계산 (최근 7일)
+        const today = new Date();
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 6);
+
+        const { data: weeklyLogs } = await supabase
+          .from("daily_logs")
+          .select("log_date, morning_promise, evening_review")
+          .eq("user_id", user.id)
+          .gte("log_date", sevenDaysAgo.toISOString().split('T')[0])
+          .lte("log_date", today.toISOString().split('T')[0])
+          .order("log_date", { ascending: true });
+
+        // 요일별 데이터 생성
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+        const weeklyData: WeeklyDay[] = [];
+
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(sevenDaysAgo);
+          date.setDate(sevenDaysAgo.getDate() + i);
+          const dateStr = date.toISOString().split('T')[0];
+          const dayName = dayNames[date.getDay()];
+
+          const log = (weeklyLogs || []).find(l => l.log_date === dateStr);
+          const hasPromise = !!log?.morning_promise;
+          const hasReview = !!log?.evening_review;
+
+          // 실행률 계산: 다짐과 실행 모두 있으면 100%, 다짐만 있으면 50%, 없으면 0%
+          let rate = 0;
+          if (hasPromise && hasReview) rate = 100;
+          else if (hasPromise) rate = 50;
+
+          // 기분 이모지 (실행률 기반)
+          let mood = '😐';
+          if (rate >= 90) mood = '🔥';
+          else if (rate >= 70) mood = '😊';
+          else if (rate >= 50) mood = '😌';
+          else if (rate >= 30) mood = '😅';
+          else if (rate > 0) mood = '🤔';
+          else mood = '😴';
+
+          weeklyData.push({ day: dayName, rate, mood });
+        }
+
+        setWeeklyPattern(weeklyData);
+
+      } catch (err) {
+        console.error("Failed to fetch profile data:", err);
+        toast({ title: "오류", description: "프로필 정보를 불러오는 데 실패했습니다.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfileData();
+  }, [user?.id, toast]);
+
+  // 프로필 수정 모달 열기
+  const openEditProfile = () => {
+    setEditName(userProfile.name);
+    setEditBio(userProfile.bio);
+    setShowEditProfile(true);
+  };
+
+  // 프로필 저장
+  const handleSaveProfile = async () => {
+    if (!user?.id) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({
+          name: editName.trim() || '사용자',
+          bio: editBio.trim(),
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      setUserProfile(prev => ({
+        ...prev,
+        name: editName.trim() || '사용자',
+        nickname: editName.trim() || '사용자',
+        bio: editBio.trim() || '아직 자기소개가 없습니다.',
+      }));
+
+      toast({ title: "저장 완료", description: "프로필이 수정되었습니다." });
+      setShowEditProfile(false);
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      toast({ title: "오류", description: "프로필 저장에 실패했습니다.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-  });
+  };
 
-  // 획득한 배지 (더미 데이터 확장)
-  const [badges] = useState<Badge[]>([
-    { 
-      id: 1, 
-      name: '얼리버드', 
-      icon: '🌅', 
-      description: '새벽 6시 이전 실행 7일 달성',
-      earned: true,
-      earnedDate: '2024-08-10',
-      rarity: 'rare'
-    },
-    { 
-      id: 2, 
-      name: '꾸준이', 
-      icon: '🔥', 
-      description: '7일 연속 실행 달성',
-      earned: true,
-      earnedDate: '2024-08-15',
-      rarity: 'common'
-    },
-    { 
-      id: 3, 
-      name: '완주왕', 
-      icon: '👑', 
-      description: '5개 훈련 코스 완료',
-      earned: true,
-      earnedDate: '2024-08-01',
-      rarity: 'epic'
-    },
-    { 
-      id: 4, 
-      name: '응원천사', 
-      icon: '💪', 
-      description: '100개 응원 메시지 전송',
-      earned: false,
-      progress: 89,
-      target: 100,
-      rarity: 'rare'
-    },
-    { 
-      id: 5, 
-      name: '챌린저', 
-      icon: '⚡', 
-      description: '어려운 목표 10개 도전',
-      earned: false,
-      progress: 7,
-      target: 10,
-      rarity: 'legendary'
-    },
-    { 
-      id: 6, 
-      name: '독서광', 
-      icon: '📚', 
-      description: '30일 연속 독서 실행',
-      earned: false,
-      progress: 12,
-      target: 30,
-      rarity: 'epic'
-    }
-  ]);
-
-  // 진행 중인 도전
-  const [ongoingChallenges] = useState<Challenge[]>([
+  // 배지 정의 및 달성 상태
+  const [badges, setBadges] = useState<Badge[]>([
     {
       id: 1,
-      title: '14일 연속 실행',
-      description: '매일 다짐과 실행을 이어가기',
-      progress: 7,
-      target: 14,
-      deadline: '2024-08-29',
-      reward: '특별 배지 + 500 포인트'
+      name: '첫 걸음',
+      icon: '👣',
+      description: '첫 번째 다짐 작성',
+      earned: false,
+      progress: 0,
+      target: 1,
+      rarity: 'common'
     },
     {
       id: 2,
-      title: '월 100시간 실행',
-      description: '한 달 동안 총 100시간 실행하기',
-      progress: 67,
-      target: 100,
-      deadline: '2024-08-31',
-      reward: '월간 챔피언 인증서'
+      name: '꾸준이',
+      icon: '🔥',
+      description: '7일 연속 실행 달성',
+      earned: false,
+      progress: 0,
+      target: 7,
+      rarity: 'common'
     },
     {
       id: 3,
-      title: '5개 분야 마스터',
-      description: '5개 다른 분야에서 각각 5회 이상 실행',
-      progress: 3,
+      name: '실행왕',
+      icon: '🏆',
+      description: '30일 연속 실행 달성',
+      earned: false,
+      progress: 0,
+      target: 30,
+      rarity: 'epic'
+    },
+    {
+      id: 4,
+      name: '완주왕',
+      icon: '👑',
+      description: '5개 훈련 코스 완료',
+      earned: false,
+      progress: 0,
       target: 5,
-      deadline: '2024-09-15',
-      reward: '마스터 타이틀 + 프리미엄 혜택'
+      rarity: 'epic'
+    },
+    {
+      id: 5,
+      name: '다짐 마스터',
+      icon: '📝',
+      description: '100개 다짐 작성',
+      earned: false,
+      progress: 0,
+      target: 100,
+      rarity: 'rare'
+    },
+    {
+      id: 6,
+      name: '토크룸 탐험가',
+      icon: '🚀',
+      description: '10개 토크룸 참여',
+      earned: false,
+      progress: 0,
+      target: 10,
+      rarity: 'legendary'
     }
   ]);
 
-  // 주간 실행 패턴 (7일간)
-  const [weeklyPattern] = useState<WeeklyDay[]>([
-    { day: '월', rate: 90, mood: '😊' },
-    { day: '화', rate: 85, mood: '😌' },
-    { day: '수', rate: 95, mood: '🔥' },
-    { day: '목', rate: 80, mood: '😐' },
-    { day: '금', rate: 70, mood: '😅' },
-    { day: '토', rate: 40, mood: '😴' },
-    { day: '일', rate: 60, mood: '🤔' }
-  ]);
+  // 레벨 계산 (경험치 = 다짐 수 * 10 + 완료 수 * 20 + 연속일 * 5)
+  const calculateLevel = (totalPromises: number, completedPromises: number, streak: number) => {
+    const exp = totalPromises * 10 + completedPromises * 20 + streak * 5;
+    // 레벨업에 필요한 경험치: 100, 200, 300, ... (레벨 * 100)
+    let level = 1;
+    let expNeeded = 100;
+    let remainingExp = exp;
+
+    while (remainingExp >= expNeeded) {
+      remainingExp -= expNeeded;
+      level++;
+      expNeeded = level * 100;
+    }
+
+    return {
+      level,
+      currentExp: remainingExp,
+      nextLevelExp: expNeeded,
+      totalExp: exp
+    };
+  };
+
+  // 배지 달성 여부 계산
+  const calculateBadges = (
+    totalPromises: number,
+    streak: number,
+    completedTrainings: number,
+    totalTalkrooms: number
+  ) => {
+    setBadges(prev => prev.map(badge => {
+      switch (badge.id) {
+        case 1: // 첫 걸음
+          return {
+            ...badge,
+            earned: totalPromises >= 1,
+            progress: Math.min(totalPromises, 1),
+            earnedDate: totalPromises >= 1 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        case 2: // 꾸준이 (7일 연속)
+          return {
+            ...badge,
+            earned: streak >= 7,
+            progress: Math.min(streak, 7),
+            earnedDate: streak >= 7 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        case 3: // 실행왕 (30일 연속)
+          return {
+            ...badge,
+            earned: streak >= 30,
+            progress: Math.min(streak, 30),
+            earnedDate: streak >= 30 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        case 4: // 완주왕 (5개 훈련)
+          return {
+            ...badge,
+            earned: completedTrainings >= 5,
+            progress: Math.min(completedTrainings, 5),
+            earnedDate: completedTrainings >= 5 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        case 5: // 다짐 마스터 (100개 다짐)
+          return {
+            ...badge,
+            earned: totalPromises >= 100,
+            progress: Math.min(totalPromises, 100),
+            earnedDate: totalPromises >= 100 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        case 6: // 토크룸 탐험가 (10개 참여)
+          return {
+            ...badge,
+            earned: totalTalkrooms >= 10,
+            progress: Math.min(totalTalkrooms, 10),
+            earnedDate: totalTalkrooms >= 10 ? new Date().toISOString().split('T')[0] : undefined
+          };
+        default:
+          return badge;
+      }
+    }));
+  };
+
+  // 주간 실행 패턴 (7일간) - 실제 데이터
+  const [weeklyPattern, setWeeklyPattern] = useState<WeeklyDay[]>([]);
 
   const StatCard: React.FC<StatCardProps> = ({ title, value, unit, color, icon: Icon, trend }) => (
     <div className="bg-white rounded-lg p-3 border border-gray-200">
@@ -269,9 +593,9 @@ export default function Profile() {
   );
 
   const BadgeCard: React.FC<BadgeCardProps> = ({ badge }) => (
-    <div 
+    <div
       className={`relative p-2 rounded-lg border cursor-pointer transition-all hover:border-gray-300 ${
-        badge.earned 
+        badge.earned
           ? 'bg-white border-gray-200'
           : 'bg-gray-50 border-gray-100 opacity-60'
       }`}
@@ -288,7 +612,7 @@ export default function Profile() {
           <div className="text-xs text-gray-500 mt-1">
             {badge.progress}/{badge.target}
             <div className="w-full bg-gray-200 rounded-full h-0.5 mt-1">
-              <div 
+              <div
                 className="bg-gray-400 h-0.5 rounded-full"
                 style={{ width: `${badge.progress && badge.target ? (badge.progress / badge.target) * 100 : 0}%` }}
               ></div>
@@ -299,49 +623,54 @@ export default function Profile() {
     </div>
   );
 
-  const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge }) => (
-    <div className="bg-white rounded-lg p-3 border border-gray-200">
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <h4 className="font-medium text-gray-900 text-xs">{challenge.title}</h4>
-          <p className="text-xs text-gray-500 mt-1">{challenge.description}</p>
+  // 로그인하지 않은 경우
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-white pb-20">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <header className="mb-6">
+            <h1 className="text-2xl font-semibold">프로필</h1>
+            <p className="text-sm text-muted-foreground">나의 실행 여정과 성취</p>
+          </header>
+          <div className="bg-white rounded-lg p-6 border border-gray-200 text-center">
+            <User className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-600 mb-4">로그인이 필요합니다.</p>
+            <a href="/login" className="inline-block px-4 py-2 bg-black text-white rounded-lg text-sm">
+              로그인하기
+            </a>
+          </div>
         </div>
-        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-          {Math.ceil((new Date(challenge.deadline).getTime() - new Date().getTime()) / (1000*60*60*24))}일 남음
-        </span>
-      </div>
-      
-      <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">진행률</span>
-          <span className="font-medium text-gray-900">
-            {challenge.progress}/{challenge.target} ({Math.round((challenge.progress / challenge.target) * 100)}%)
-          </span>
+      </main>
+    );
+  }
+
+  // 로딩 중
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-white pb-20">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <header className="mb-6">
+            <h1 className="text-2xl font-semibold">프로필</h1>
+            <p className="text-sm text-muted-foreground">나의 실행 여정과 성취</p>
+          </header>
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-1">
-          <div 
-            className="bg-black h-1 rounded-full transition-all"
-            style={{ width: `${(challenge.progress / challenge.target) * 100}%` }}
-          ></div>
-        </div>
-        <div className="text-xs text-gray-400">
-          완료 시: {challenge.reward}
-        </div>
-      </div>
-    </div>
-  );
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="p-3">
-          <h1 className="text-lg font-semibold text-gray-900">프로필</h1>
-          <p className="text-xs text-gray-600">나의 실행 여정과 성취</p>
-        </div>
-      </header>
+    <main className="min-h-screen bg-white pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        {/* 헤더 */}
+        <header className="mb-6">
+          <h1 className="text-2xl font-semibold">프로필</h1>
+          <p className="text-sm text-muted-foreground">나의 실행 여정과 성취</p>
+        </header>
 
-      <div className="p-3 space-y-4 pb-20">
+        <div className="space-y-4">
         {/* 프로필 카드 */}
         <div className="bg-white rounded-lg p-3 border border-gray-200">
           <div className="flex items-center gap-3 mb-3">
@@ -359,7 +688,10 @@ export default function Profile() {
               </div>
               <p className="text-xs text-gray-500">{userProfile.bio}</p>
             </div>
-            <button className="p-1 text-gray-400 hover:text-gray-600">
+            <button
+              onClick={openEditProfile}
+              className="p-1 text-gray-400 hover:text-gray-600"
+            >
               <Edit3 className="w-3 h-3" />
             </button>
           </div>
@@ -520,14 +852,6 @@ export default function Profile() {
                 ))}
               </div>
             </div>
-
-            {/* 진행 중인 도전 */}
-            <div className="space-y-2">
-              <h3 className="font-medium text-gray-900 text-xs">진행 중인 도전</h3>
-              {ongoingChallenges.map(challenge => (
-                <ChallengeCard key={challenge.id} challenge={challenge} />
-              ))}
-            </div>
           </div>
         )}
 
@@ -610,7 +934,10 @@ export default function Profile() {
                   <ChevronRight className="w-3 h-3 text-gray-300" />
                 </button>
                 
-                <button className="w-full flex items-center justify-between p-3 hover:bg-gray-50">
+                <button
+                  className="w-full flex items-center justify-between p-3 hover:bg-gray-50"
+                  onClick={() => setShowNotificationSettings(true)}
+                >
                   <div className="flex items-center gap-2">
                     <Bell className="w-3 h-3 text-gray-400" />
                     <span className="text-xs text-gray-900">알림 설정</span>
@@ -691,7 +1018,7 @@ export default function Profile() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-900 mb-2">{showBadgeDetail.name}</h3>
                 <p className="text-xs text-gray-600 mb-3">{showBadgeDetail.description}</p>
-                
+
                 {showBadgeDetail.earned ? (
                   <div className="bg-gray-50 border border-gray-200 rounded p-2 mb-3">
                     <div className="text-gray-700 font-medium text-xs">획득 완료</div>
@@ -705,14 +1032,14 @@ export default function Profile() {
                       진행률: {showBadgeDetail.progress}/{showBadgeDetail.target}
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
-                      <div 
+                      <div
                         className="bg-gray-900 h-1 rounded-full"
                         style={{ width: `${showBadgeDetail.progress && showBadgeDetail.target ? (showBadgeDetail.progress / showBadgeDetail.target) * 100 : 0}%` }}
                       ></div>
                     </div>
                   </div>
                 )}
-                
+
                 <button
                   onClick={() => setShowBadgeDetail(null)}
                   className="w-full bg-black text-white py-2 rounded font-medium text-xs hover:bg-gray-900"
@@ -723,6 +1050,154 @@ export default function Profile() {
             </div>
           </div>
         )}
+
+        {/* 프로필 수정 모달 */}
+        {showEditProfile && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 w-full max-w-xs">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">프로필 수정</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">이름</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
+                    placeholder="이름을 입력하세요"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">자기소개</label>
+                  <textarea
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-gray-400 resize-none"
+                    rows={3}
+                    placeholder="자기소개를 입력하세요"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setShowEditProfile(false)}
+                  className="flex-1 py-2 border border-gray-200 rounded text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  disabled={isSaving}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={isSaving}
+                  className="flex-1 py-2 bg-black text-white rounded text-xs font-medium hover:bg-gray-900 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      저장 중...
+                    </>
+                  ) : (
+                    '저장'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 알림 설정 모달 */}
+        {showNotificationSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 w-full max-w-xs">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">알림 설정</h3>
+
+              <div className="space-y-4">
+                {/* 아침 다짐 알림 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-900">아침 다짐 알림</span>
+                    <button
+                      onClick={() => setNotificationSettings(prev => ({ ...prev, morningReminder: !prev.morningReminder }))}
+                      className={`w-10 h-5 rounded-full transition-colors ${notificationSettings.morningReminder ? 'bg-black' : 'bg-gray-200'}`}
+                    >
+                      <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${notificationSettings.morningReminder ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  {notificationSettings.morningReminder && (
+                    <input
+                      type="time"
+                      value={notificationSettings.morningTime}
+                      onChange={(e) => setNotificationSettings(prev => ({ ...prev, morningTime: e.target.value }))}
+                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-gray-400"
+                    />
+                  )}
+                </div>
+
+                {/* 저녁 성과 알림 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-900">저녁 성과 알림</span>
+                    <button
+                      onClick={() => setNotificationSettings(prev => ({ ...prev, eveningReminder: !prev.eveningReminder }))}
+                      className={`w-10 h-5 rounded-full transition-colors ${notificationSettings.eveningReminder ? 'bg-black' : 'bg-gray-200'}`}
+                    >
+                      <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${notificationSettings.eveningReminder ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  {notificationSettings.eveningReminder && (
+                    <input
+                      type="time"
+                      value={notificationSettings.eveningTime}
+                      onChange={(e) => setNotificationSettings(prev => ({ ...prev, eveningTime: e.target.value }))}
+                      className="w-full border border-gray-200 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-gray-400"
+                    />
+                  )}
+                </div>
+
+                {/* 응원 알림 */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-900">응원 알림</span>
+                  <button
+                    onClick={() => setNotificationSettings(prev => ({ ...prev, cheerNotification: !prev.cheerNotification }))}
+                    className={`w-10 h-5 rounded-full transition-colors ${notificationSettings.cheerNotification ? 'bg-black' : 'bg-gray-200'}`}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${notificationSettings.cheerNotification ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+
+                {/* 시스템 알림 */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-900">시스템 알림</span>
+                  <button
+                    onClick={() => setNotificationSettings(prev => ({ ...prev, systemNotification: !prev.systemNotification }))}
+                    className={`w-10 h-5 rounded-full transition-colors ${notificationSettings.systemNotification ? 'bg-black' : 'bg-gray-200'}`}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${notificationSettings.systemNotification ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setShowNotificationSettings(false)}
+                  className="flex-1 py-2 border border-gray-200 rounded text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSaveNotifications}
+                  className="flex-1 py-2 bg-black text-white rounded text-xs font-medium hover:bg-gray-900"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
     </main>
   );

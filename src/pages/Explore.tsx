@@ -31,105 +31,6 @@ const Explore = () => {
   const [allRooms, setAllRooms] = useState<TalkRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 샘플 데이터
-  const sampleRooms: TalkRoom[] = [
-    {
-      id: "sample-1",
-      title: "아토믹 해빗",
-      description: "작은 습관이 만드는 큰 변화",
-      media_type: "book",
-      media_url: "/images/pop1.jpg",
-      price_cents: 1500000,
-      price_currency: "KRW",
-      capacity: 8,
-      host_id: "sample-host-1",
-      starts_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      keywords: ["습관", "자기계발"],
-      is_public: true,
-      replay_available: false,
-      training_weeks: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: "upcoming"
-    },
-    {
-      id: "sample-2",
-      title: "미라클 모닝",
-      description: "성공하는 사람들의 아침 루틴",
-      media_type: "book",
-      media_url: "/images/pop2.jpg",
-      price_cents: 1200000,
-      price_currency: "KRW",
-      capacity: 6,
-      host_id: "sample-host-2",
-      starts_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-      keywords: ["루틴", "생산성"],
-      is_public: true,
-      replay_available: false,
-      training_weeks: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: "upcoming"
-    },
-    {
-      id: "sample-3",
-      title: "사피엔스",
-      description: "인류 문명의 역사",
-      media_type: "book",
-      media_url: "/images/pop3.jpg",
-      price_cents: 1800000,
-      price_currency: "KRW",
-      capacity: 10,
-      host_id: "sample-host-3",
-      starts_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      keywords: ["역사", "인문학"],
-      is_public: true,
-      replay_available: false,
-      training_weeks: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: "upcoming"
-    },
-    {
-      id: "sample-4",
-      title: "부의 추월차선",
-      description: "젊어서 부자가 되는 방법",
-      media_type: "book",
-      media_url: "/images/pop1.jpg",
-      price_cents: 1600000,
-      price_currency: "KRW",
-      capacity: 6,
-      host_id: "sample-host-4",
-      starts_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-      keywords: ["재테크", "투자"],
-      is_public: true,
-      replay_available: false,
-      training_weeks: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: "upcoming"
-    },
-    {
-      id: "sample-5",
-      title: "데일 카네기 인간관계론",
-      description: "사람의 마음을 움직이는 대화법",
-      media_type: "book",
-      media_url: "/images/pop2.jpg",
-      price_cents: 1400000,
-      price_currency: "KRW",
-      capacity: 8,
-      host_id: "sample-host-5",
-      starts_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-      keywords: ["소통", "관계"],
-      is_public: true,
-      replay_available: false,
-      training_weeks: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: "upcoming"
-    }
-  ];
-
   useEffect(() => {
     fetchTalkRooms();
   }, []);
@@ -147,19 +48,21 @@ const Explore = () => {
       setAllRooms(rooms || []);
     } catch (error) {
       console.error('Error fetching talk rooms:', error);
-      setAllRooms(sampleRooms);
+      setAllRooms([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredRooms = allRooms.filter(room =>
-    room.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    room.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    room.keywords?.some(keyword => keyword.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredRooms = searchQuery
+    ? allRooms.filter(room =>
+        room.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        room.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        room.keywords?.some(keyword => keyword.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : allRooms;
 
-  const roomsToShow = filteredRooms.length > 0 ? filteredRooms : sampleRooms;
+  const roomsToShow = filteredRooms;
 
   if (loading) {
     return (
@@ -219,10 +122,12 @@ const Explore = () => {
           ))}
         </div>
 
-        {/* 검색 결과 없음 */}
-        {searchQuery && filteredRooms.length === 0 && (
+        {/* 결과 없음 */}
+        {roomsToShow.length === 0 && (
           <div className="py-16 text-center">
-            <p className="text-gray-400">검색 결과가 없습니다</p>
+            <p className="text-gray-400">
+              {searchQuery ? '검색 결과가 없습니다' : '아직 공개된 토크룸이 없습니다'}
+            </p>
           </div>
         )}
       </div>

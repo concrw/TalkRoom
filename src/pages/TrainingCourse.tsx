@@ -162,9 +162,10 @@ export default function TrainingCourse() {
   if (loading) return <main className="min-h-screen p-6">로딩 중...</main>;
 
   return (
-    <main className="min-h-screen p-6">
-      <h1 className="text-2xl font-semibold mb-4">훈련 코스 설계</h1>
-      <section className="max-w-4xl space-y-4">
+    <main className="min-h-screen bg-white pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <h1 className="text-2xl font-semibold mb-4">훈련 코스 설계</h1>
+        <section className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">{room?.title || "토크룸"}</CardTitle>
@@ -215,7 +216,8 @@ export default function TrainingCourse() {
             </div>
           </CardContent>
         </Card>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

@@ -150,10 +150,11 @@ export default function Review() {
   }
 
   return (
-    <main className="min-h-screen p-6">
-      <h1 className="text-2xl font-semibold mb-4">리뷰 작성</h1>
+    <main className="min-h-screen bg-white pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <h1 className="text-2xl font-semibold mb-4">리뷰 작성</h1>
 
-      <section className="grid gap-4 max-w-3xl">
+        <section className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">{room?.title ?? "토크룸"}</CardTitle>
@@ -188,7 +189,8 @@ export default function Review() {
             </div>
           </CardContent>
         </Card>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

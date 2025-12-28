@@ -148,70 +148,108 @@ export default function Schedule() {
     return { percent, label: `${current}/${course.total_days}일` };
   }, [course]);
 
-  // 더미 데이터
-  const [weeklyStats] = useState({
-    streak: 3,
-    completedMissions: 18,
-    totalMissions: 21,
-    daysToNextGoal: 2
+  // 주간 통계 조회
+  const { data: weeklyStats } = useQuery({
+    queryKey: ["weekly-stats", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const today = new Date();
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const { data: logs, error } = await supabase
+        .from("daily_logs")
+        .select("log_date, morning_promise, evening_review")
+        .eq("user_id", user!.id)
+        .gte("log_date", weekAgo)
+        .order("log_date", { ascending: false });
+
+      if (error) throw error;
+
+      const totalMissions = (logs?.length || 0) * 2;
+      const completedMissions = (logs || []).reduce((acc, log) => {
+        return acc + (log.morning_promise ? 1 : 0) + (log.evening_review ? 1 : 0);
+      }, 0);
+
+      // 연속 달성 계산
+      let streak = 0;
+      const sortedLogs = [...(logs || [])].sort((a, b) =>
+        new Date(b.log_date).getTime() - new Date(a.log_date).getTime()
+      );
+      for (const log of sortedLogs) {
+        if (log.morning_promise && log.evening_review) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+
+      // 다음 목표까지 남은 일수 (7일 완주 기준)
+      const daysToNextGoal = Math.max(0, 7 - streak);
+
+      return {
+        streak,
+        completedMissions,
+        totalMissions: Math.max(totalMissions, 14), // 최소 7일 * 2미션
+        daysToNextGoal
+      };
+    },
   });
 
-  // 더미 토크룸 데이터 (실제 데이터가 없을 때)
-  const dummyMyRooms = [
-    {
-      id: "1",
-      title: "아침 루틴 만들기",
-      time: "09:00",
-      type: "scheduled",
-      status: "upcoming"
+  // 참가자 수 조회를 위한 쿼리
+  const { data: participantsCounts } = useQuery({
+    queryKey: ["participants-counts", allTalkrooms?.map(r => r.id)],
+    enabled: !!allTalkrooms && allTalkrooms.length > 0,
+    queryFn: async () => {
+      const counts: Record<string, number> = {};
+      for (const room of allTalkrooms!) {
+        const { count, error } = await supabase
+          .from("room_participants")
+          .select("id", { count: "exact", head: true })
+          .eq("room_id", room.id);
+        if (!error) {
+          counts[room.id] = count || 0;
+        }
+      }
+      return counts;
     },
-    {
-      id: "2", 
-      title: "독서 습관 토크룸",
-      time: "20:00",
-      type: "scheduled", 
-      status: "ongoing"
-    }
-  ];
+  });
 
-  const dummyAllRooms = [
-    {
-      id: "1",
-      title: "아침 루틴 만들기",
-      time: "09:00",
-      type: "scheduled",
-      status: "upcoming",
-      participants: "8명",
-      isMine: true
+  // 인기 시간대 계산
+  const { data: popularTimes } = useQuery({
+    queryKey: ["popular-times"],
+    queryFn: async () => {
+      const { data: rooms, error } = await supabase
+        .from("talk_rooms")
+        .select("starts_at")
+        .eq("is_public", true);
+
+      if (error) throw error;
+
+      const timeSlots: Record<string, number> = {
+        '오전 6시 - 9시': 0,
+        '오전 9시 - 12시': 0,
+        '오후 12시 - 3시': 0,
+        '오후 3시 - 6시': 0,
+        '오후 6시 - 9시': 0,
+        '오후 9시 - 12시': 0
+      };
+
+      (rooms || []).forEach(room => {
+        const hour = new Date(room.starts_at).getHours();
+        if (hour >= 6 && hour < 9) timeSlots['오전 6시 - 9시']++;
+        else if (hour >= 9 && hour < 12) timeSlots['오전 9시 - 12시']++;
+        else if (hour >= 12 && hour < 15) timeSlots['오후 12시 - 3시']++;
+        else if (hour >= 15 && hour < 18) timeSlots['오후 3시 - 6시']++;
+        else if (hour >= 18 && hour < 21) timeSlots['오후 6시 - 9시']++;
+        else timeSlots['오후 9시 - 12시']++;
+      });
+
+      return Object.entries(timeSlots)
+        .map(([time, count]) => ({ time, count: `${count}개 토크룸` }))
+        .sort((a, b) => parseInt(b.count) - parseInt(a.count))
+        .slice(0, 3);
     },
-    {
-      id: "2",
-      title: "독서 습관 토크룸", 
-      time: "20:00",
-      type: "scheduled",
-      status: "ongoing",
-      participants: "12명", 
-      isMine: true
-    },
-    {
-      id: "3",
-      title: "운동 동기부여",
-      time: "07:30",
-      type: "scheduled",
-      status: "upcoming", 
-      participants: "6명",
-      isMine: false
-    },
-    {
-      id: "4",
-      title: "영어 스피킹 연습",
-      time: "19:30", 
-      type: "scheduled",
-      status: "upcoming",
-      participants: "15명",
-      isMine: false
-    }
-  ];
+  });
 
   // 유틸리티 함수들
   const generateCalendar = () => {
@@ -254,42 +292,35 @@ export default function Schedule() {
     }
   };
 
-  // 오늘 일정 데이터 준비 (더미 데이터 포함)
-  const todaySchedule: ScheduleItem[] = viewMode === 'my' 
-    ? (upcoming && upcoming.length > 0 
-        ? upcoming.map(room => ({
-            id: room.id as string,
-            time: new Date(room.starts_at as string).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-            title: room.title as string,
-            type: 'scheduled',
-            status: new Date(room.starts_at as string) <= new Date() ? 'ongoing' : 'upcoming'
-          }))
-        : dummyMyRooms
-      )
-    : (allTalkrooms && allTalkrooms.length > 0
-        ? allTalkrooms.map(room => ({
-            id: room.id as string,
-            time: new Date(room.starts_at as string).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-            title: room.title as string,
-            type: 'scheduled',
-            status: new Date(room.starts_at as string) <= new Date() ? 'ongoing' : 'upcoming',
-            participants: `${Math.floor(Math.random() * 20) + 5}명`,
-            isMine: upcoming?.some(my => my.id === room.id) || false
-          }))
-        : dummyAllRooms
-      );
+  // 오늘 일정 데이터 준비
+  const todaySchedule: ScheduleItem[] = viewMode === 'my'
+    ? (upcoming || []).map(room => ({
+        id: room.id as string,
+        time: new Date(room.starts_at as string).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        title: room.title as string,
+        type: 'scheduled',
+        status: new Date(room.starts_at as string) <= new Date() ? 'ongoing' : 'upcoming'
+      }))
+    : (allTalkrooms || []).map(room => ({
+        id: room.id as string,
+        time: new Date(room.starts_at as string).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+        title: room.title as string,
+        type: 'scheduled',
+        status: new Date(room.starts_at as string) <= new Date() ? 'ongoing' : 'upcoming',
+        participants: `${participantsCounts?.[room.id] || 0}명`,
+        isMine: upcoming?.some(my => my.id === room.id) || false
+      }));
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="p-3">
-          <h1 className="text-lg font-semibold text-gray-900">일정</h1>
-          <p className="text-xs text-gray-600">오늘의 다짐과 토크룸</p>
-        </div>
-      </header>
+    <main className="min-h-screen bg-white pb-20">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        {/* 헤더 */}
+        <header className="mb-6">
+          <h1 className="text-2xl font-semibold">일정</h1>
+          <p className="text-sm text-muted-foreground">오늘의 다짐과 토크룸</p>
+        </header>
 
-      <div className="p-3 space-y-4 pb-20">
+        <div className="space-y-4">
         {/* 전체/내 일정 스위치 */}
         <div className="bg-white rounded-lg p-1 flex border border-gray-200">
           <button
@@ -470,23 +501,31 @@ export default function Schedule() {
             {/* 이번 주 성취 */}
             <div className="bg-white rounded-lg p-3 border border-gray-200">
               <h2 className="text-xs font-medium text-gray-900 mb-2">이번 주 성취</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-sm font-medium text-gray-900 mb-1">{weeklyStats.streak}</div>
-                  <div className="text-xs text-gray-500">연속 달성</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm font-medium text-gray-900 mb-1">
-                    {weeklyStats.completedMissions}/{weeklyStats.totalMissions}
+              {weeklyStats ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900 mb-1">{weeklyStats.streak}</div>
+                      <div className="text-xs text-gray-500">연속 달성</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900 mb-1">
+                        {weeklyStats.completedMissions}/{weeklyStats.totalMissions}
+                      </div>
+                      <div className="text-xs text-gray-500">완료한 미션</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">완료한 미션</div>
+                  <div className="mt-2 text-center">
+                    <span className="text-xs text-gray-600">
+                      다음 목표까지 <span className="font-medium text-gray-900">{weeklyStats.daysToNextGoal}일</span> 남음
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="py-3 text-center">
+                  <p className="text-gray-400 text-xs">미션 기록이 없습니다</p>
                 </div>
-              </div>
-              <div className="mt-2 text-center">
-                <span className="text-xs text-gray-600">
-                  다음 목표까지 <span className="font-medium text-gray-900">{weeklyStats.daysToNextGoal}일</span> 남음
-                </span>
-              </div>
+              )}
             </div>
           </>
         ) : (
@@ -494,16 +533,18 @@ export default function Schedule() {
           <div className="bg-white rounded-lg p-3 border border-gray-200">
             <h2 className="text-xs font-medium text-gray-900 mb-2">인기 시간대</h2>
             <div className="space-y-1">
-              {[
-                { time: '오후 8시 - 10시', count: '5개 토크룸' },
-                { time: '오후 2시 - 4시', count: '3개 토크룸' },
-                { time: '오전 10시 - 12시', count: '2개 토크룸' }
-              ].map((slot, index) => (
-                <div key={index} className="flex items-center justify-between py-1.5 text-xs">
-                  <span className="text-gray-900">{slot.time}</span>
-                  <span className="text-xs text-gray-500">{slot.count}</span>
+              {(popularTimes && popularTimes.length > 0) ? (
+                popularTimes.map((slot, index) => (
+                  <div key={index} className="flex items-center justify-between py-1.5 text-xs">
+                    <span className="text-gray-900">{slot.time}</span>
+                    <span className="text-xs text-gray-500">{slot.count}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="py-3 text-center">
+                  <p className="text-gray-400 text-xs">토크룸 데이터가 없습니다</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}
@@ -564,6 +605,7 @@ export default function Schedule() {
               토크룸 탐색하기
             </Link>
           </div>
+        </div>
         </div>
       </div>
     </main>

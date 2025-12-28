@@ -83,7 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      toast({ title: "로그인 실패", description: error.message, variant: "destructive" });
+      let message = error.message;
+      // 더 친절한 한국어 에러 메시지
+      if (error.message.includes("Invalid login credentials")) {
+        message = "이메일 또는 비밀번호가 올바르지 않습니다. 회원가입을 먼저 해주세요.";
+      } else if (error.message.includes("Email not confirmed")) {
+        message = "이메일 인증이 필요합니다. 이메일을 확인해주세요.";
+      }
+      toast({ title: "로그인 실패", description: message, variant: "destructive" });
     } else {
       toast({ title: "로그인 성공", description: "환영합니다!" });
     }
@@ -101,14 +108,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) {
-      toast({ title: "회원가입 실패", description: error.message, variant: "destructive" });
+      let message = error.message;
+      // 더 친절한 한국어 에러 메시지
+      if (error.message.includes("Password should be at least")) {
+        message = "비밀번호는 최소 6자 이상이어야 합니다.";
+      } else if (error.message.includes("User already registered")) {
+        message = "이미 가입된 이메일입니다. 로그인을 시도해주세요.";
+      } else if (error.message.includes("Invalid email")) {
+        message = "올바른 이메일 형식이 아닙니다.";
+      }
+      toast({ title: "회원가입 실패", description: message, variant: "destructive" });
     } else {
       if (data.user) {
         setTimeout(() => {
           ensureProfile(data.user as User, name).catch(() => {});
         }, 0);
       }
-      toast({ title: "회원가입 완료", description: "이메일을 확인하거나 자동으로 로그인됩니다." });
+      // 이메일 인증이 필요한 경우와 아닌 경우 구분
+      const needsConfirmation = data.user && !data.session;
+      if (needsConfirmation) {
+        toast({ title: "회원가입 완료", description: "이메일 인증 링크가 발송되었습니다. 메일함을 확인해주세요." });
+      } else {
+        toast({ title: "회원가입 완료", description: "환영합니다! 자동으로 로그인되었습니다." });
+      }
     }
     return { error };
   };

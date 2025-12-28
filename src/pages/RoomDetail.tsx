@@ -9,8 +9,16 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import VoiceChat from "@/components/VoiceChat";
 
 const currency = new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW" });
+
+// UUID 형식 검증 함수
+const isValidUUID = (str: string) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 
 export default function RoomDetail() {
   const { id } = useParams();
@@ -18,15 +26,6 @@ export default function RoomDetail() {
   const { user, session } = useAuth();
   const { toast } = useToast();
   const roomId = id as string;
-
-  useEffect(() => {
-    if (room?.data) {
-      const title = `${room.data.title} - TALKROOM`;
-      document.title = title;
-      const meta = document.querySelector('meta[name="description"]');
-      if (meta) meta.setAttribute("content", `${room.data.title} 토크룸 상세 정보와 참여 안내.`);
-    }
-  }, []);
 
   const room = useQuery({
     queryKey: ["talk_room", roomId],
@@ -39,8 +38,17 @@ export default function RoomDetail() {
       if (error) throw error;
       return data!;
     },
-    enabled: !!roomId,
+    enabled: !!roomId && isValidUUID(roomId),
   });
+
+  useEffect(() => {
+    if (room.data) {
+      const title = `${room.data.title} - TALKROOM`;
+      document.title = title;
+      const meta = document.querySelector('meta[name="description"]');
+      if (meta) meta.setAttribute("content", `${room.data.title} 토크룸 상세 정보와 참여 안내.`);
+    }
+  }, [room.data]);
 
   const participantsCount = useQuery({
     queryKey: ["participants_count", roomId],
@@ -52,7 +60,7 @@ export default function RoomDetail() {
       if (error) throw error;
       return count || 0;
     },
-    enabled: !!roomId,
+    enabled: !!roomId && isValidUUID(roomId),
   });
 
   const host = useQuery({
@@ -83,15 +91,33 @@ export default function RoomDetail() {
       if (error) throw error;
       return data;
     },
-    enabled: !!roomId && !!user,
+    enabled: !!roomId && !!user && isValidUUID(roomId),
   });
 
-  const isFull = useMemo(() => {
-    if (!room.data) return false;
-    return (participantsCount.data || 0) >= (room.data.capacity || 0);
-  }, [participantsCount.data, room.data]);
+  const participant = useQuery({
+    queryKey: ["participant", roomId, user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("room_participants")
+        .select("id")
+        .eq("room_id", roomId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!roomId && !!user && isValidUUID(roomId),
+  });
 
-  const isHost = user?.id === room.data?.host_id;
+  const roomData = room.data;
+
+  const isFull = useMemo(() => {
+    if (!roomData) return false;
+    return (participantsCount.data || 0) >= (roomData.capacity || 0);
+  }, [participantsCount.data, roomData]);
+
+  const isHost = user?.id === roomData?.host_id;
 
   const handleToggleFavorite = async () => {
     if (!session) {
@@ -120,32 +146,32 @@ export default function RoomDetail() {
       navigate("/auth", { replace: false, state: { from: location.pathname } });
       return;
     }
-    navigate("/payment", { state: { roomId, title: room.data?.title } });
+    navigate("/payment", { state: { roomId, title: roomData?.title } });
   };
 
   if (room.isLoading) return <main className="min-h-screen p-6">불러오는 중...</main>;
   if (room.isError || !room.data) return <main className="min-h-screen p-6">토크룸을 찾을 수 없습니다.</main>;
 
   return (
-    <main className="min-h-screen p-6">
-      <article className="max-w-5xl mx-auto">
-        <header className="mb-4">
-          <h1 className="text-3xl font-semibold">{room.data.title}</h1>
-          <p className="text-muted-foreground">{new Date(room.data.starts_at as string).toLocaleString("ko-KR")}</p>
+    <main className="min-h-screen bg-white pb-20">
+      <article className="max-w-2xl mx-auto px-4 py-6">
+        <header className="mb-6">
+          <h1 className="text-2xl font-semibold">{roomData.title}</h1>
+          <p className="text-muted-foreground text-sm">{new Date(roomData.starts_at as string).toLocaleString("ko-KR")}</p>
         </header>
 
-        <section className="grid gap-6 md:grid-cols-5">
-          <div className="md:col-span-3">
+        <section className="space-y-6">
+          <div>
             <div className="aspect-video bg-muted flex items-center justify-center text-muted-foreground border rounded-md">
               {/* 강조된 미디어 영역 (회색 플레이스홀더) */}
-              {room.data.media_type ? room.data.media_type.toUpperCase() : "MEDIA"}
+              {roomData.media_type ? roomData.media_type.toUpperCase() : "MEDIA"}
             </div>
             <Card className="mt-4">
               <CardContent className="p-4 space-y-3">
                 <h2 className="text-xl font-medium">토크룸 정보</h2>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{room.data.description}</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{roomData.description}</p>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {(room.data.keywords || []).map((k: string) => (
+                  {(roomData.keywords || []).map((k: string) => (
                     <Badge key={k} className="bg-foreground text-background">#{k}</Badge>
                   ))}
                 </div>
@@ -153,27 +179,27 @@ export default function RoomDetail() {
             </Card>
           </div>
 
-          <aside className="md:col-span-2 space-y-4">
+          <aside className="space-y-4">
             <Card>
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">참가비</span>
-                  <span className="text-lg font-semibold">{currency.format((room.data.price_cents as number) / 100)}</span>
+                  <span className="text-lg font-semibold">{currency.format((roomData.price_cents as number) / 100)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">정원</span>
-                  <span>{participantsCount.data || 0} / {room.data.capacity}</span>
+                  <span>{participantsCount.data || 0} / {roomData.capacity}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">다시듣기</span>
-                  <span>{room.data.replay_available ? "가능" : "불가"}</span>
+                  <span>{roomData.replay_available ? "가능" : "불가"}</span>
                 </div>
                 <div className="pt-2 flex gap-2">
                   {isHost && (
                     <div className="flex-1">
                       <span className="text-sm text-muted-foreground">훈련 기간(주)</span>
                       <Select
-                        defaultValue={String((room.data.training_weeks as number) || 3)}
+                        defaultValue={String((roomData.training_weeks as number) || 3)}
                         onValueChange={async (value) => {
                           try {
                             const weeks = parseInt(value, 10);
@@ -227,6 +253,16 @@ export default function RoomDetail() {
                 )}
               </CardContent>
             </Card>
+
+            {/* 음성 채팅 (참가자만 사용 가능) */}
+            {participant.data?.id && user && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="text-base font-medium mb-4">음성 채팅</h3>
+                  <VoiceChat roomId={roomId} userId={user.id} />
+                </CardContent>
+              </Card>
+            )}
           </aside>
         </section>
       </article>

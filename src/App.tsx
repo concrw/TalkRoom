@@ -10,6 +10,8 @@ import TalkRoomsList from "./pages/TalkRoomsList";
 import MyRooms from "./pages/MyRooms";
 import JoinRoom from "./pages/JoinRoom";
 import Payment from "./pages/Payment";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFail from "./pages/PaymentFail";
 import Review from "./pages/Review";
 import DailyMissions from "./pages/DailyMissions";
 import RoomDetail from "./pages/RoomDetail";
@@ -23,6 +25,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import BottomNav from "./components/BottomNav";
 import OfflineNotice from "./components/OfflineNotice";
 import GlobalAppEffects from "./components/GlobalAppEffects";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Explore from "./pages/Explore";
 import Schedule from "./pages/Schedule";
 import Profile from "./pages/Profile";
@@ -31,15 +34,16 @@ import Community from "./pages/Community";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <GlobalAppEffects />
-      <AuthProvider>
-        <BrowserRouter>
-          <OfflineNotice />
-          <Routes>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <GlobalAppEffects />
+        <AuthProvider>
+          <BrowserRouter>
+            <OfflineNotice />
+            <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/auth/login" element={<Auth />} />
@@ -55,6 +59,8 @@ const App = () => (
             <Route path="/create-room" element={<ProtectedRoute><CreateRoom /></ProtectedRoute>} />
             <Route path="/edit-room/:id" element={<ProtectedRoute><EditRoom /></ProtectedRoute>} />
             <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+            <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccess /></ProtectedRoute>} />
+            <Route path="/payment/fail" element={<PaymentFail />} />
             <Route path="/review/:id" element={<ProtectedRoute><Review /></ProtectedRoute>} />
             <Route path="/training-course/:roomId" element={<ProtectedRoute><TrainingCourse /></ProtectedRoute>} />
             <Route path="/daily/:roomId" element={<ProtectedRoute><Daily /></ProtectedRoute>} />
@@ -63,11 +69,12 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-          <BottomNav />
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+            <BottomNav />
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

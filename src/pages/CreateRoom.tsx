@@ -17,6 +17,8 @@ export default function CreateRoom() {
   const [description, setDescription] = useState("");
   const [mediaType, setMediaType] = useState<string>("");
   const [mediaUrl, setMediaUrl] = useState<string>("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [price, setPrice] = useState<number>(0); // KRW
   const [capacity, setCapacity] = useState<number>(50);
   const [trainingWeeks, setTrainingWeeks] = useState<number>(3);
@@ -33,13 +35,56 @@ export default function CreateRoom() {
     if (!link.parentNode) document.head.appendChild(link);
   }, []);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // 파일 크기 제한 (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "파일 크기 초과", description: "10MB 이하 파일만 업로드 가능합니다.", variant: "destructive" });
+        return;
+      }
+      setMediaFile(file);
+      // 파일 타입 자동 설정
+      if (file.type.startsWith("video/")) setMediaType("video");
+      else if (file.type.startsWith("audio/")) setMediaType("audio");
+      else if (file.type.startsWith("image/")) setMediaType("image");
+    }
+  };
+
   const onSubmit = async () => {
     if (!user?.id) return;
     if (!title.trim()) {
       toast({ title: "제목 필요", description: "제목을 입력하세요.", variant: "destructive" });
       return;
     }
+
+    setIsUploading(true);
+
     try {
+      let uploadedMediaUrl = mediaUrl;
+
+      // 파일 업로드
+      if (mediaFile) {
+        const fileExt = mediaFile.name.split(".").pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("room-media")
+          .upload(fileName, mediaFile, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Public URL 가져오기
+        const { data: { publicUrl } } = supabase.storage
+          .from("room-media")
+          .getPublicUrl(fileName);
+
+        uploadedMediaUrl = publicUrl;
+      }
+
       const kw = keywords
         .split(",")
         .map((k) => k.trim())
@@ -51,7 +96,7 @@ export default function CreateRoom() {
           title: title.trim(),
           description: description.trim() || null,
           media_type: mediaType || null,
-          media_url: mediaUrl || null,
+          media_url: uploadedMediaUrl || null,
           price_cents: priceCents,
           price_currency: "KRW",
           capacity,
@@ -69,6 +114,8 @@ export default function CreateRoom() {
       navigate(`/rooms/${data?.id}`);
     } catch (e: any) {
       toast({ title: "생성 실패", description: e.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -82,9 +129,19 @@ export default function CreateRoom() {
       <Card className="p-4 space-y-3 max-w-2xl">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" />
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input value={mediaType} onChange={(e) => setMediaType(e.target.value)} placeholder="미디어 타입 (video/audio 등)" />
-          <Input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="미디어 URL" />
+        <div className="space-y-2">
+          <label className="text-sm font-medium">미디어 파일</label>
+          <Input
+            type="file"
+            accept="image/*,video/*,audio/*"
+            onChange={handleFileChange}
+            className="cursor-pointer"
+          />
+          {mediaFile && (
+            <p className="text-xs text-gray-600">선택된 파일: {mediaFile.name}</p>
+          )}
+          <p className="text-xs text-gray-500">또는 URL을 직접 입력하세요</p>
+          <Input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="미디어 URL (직접 입력)" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} placeholder="참가비 (KRW)" />
@@ -94,7 +151,9 @@ export default function CreateRoom() {
         </div>
         <Input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="키워드 (쉼표로 구분)" />
         <div className="flex gap-2">
-          <Button onClick={onSubmit}>생성</Button>
+          <Button onClick={onSubmit} disabled={isUploading}>
+            {isUploading ? "업로드 중..." : "생성"}
+          </Button>
         </div>
       </Card>
     </main>
