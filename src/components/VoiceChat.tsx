@@ -40,8 +40,9 @@ export default function VoiceChat({ roomId, userId }: VoiceChatProps) {
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      // 정리 작업
       disconnectVoice();
+      supabase.removeChannel(channel);
     };
   }, [roomId, userId]);
 

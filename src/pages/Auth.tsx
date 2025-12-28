@@ -113,6 +113,14 @@ const Auth = () => {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (password.length < 6) {
+                  toast({
+                    title: "비밀번호 길이 오류",
+                    description: "비밀번호는 최소 6자 이상이어야 합니다.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 if (password !== passwordConfirm) {
                   toast({
                     title: "비밀번호 불일치",
