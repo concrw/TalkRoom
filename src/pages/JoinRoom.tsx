@@ -30,8 +30,6 @@ interface UserProfile {
   id: string;
   name: string | null;
   bio: string | null;
-  level: number;
-  streak_days: number;
   rating: number;
 }
 
@@ -527,7 +525,7 @@ export default function JoinRoom() {
                 <Avatar className="h-10 w-10"><AvatarFallback>{(selectedProfile.name || '').slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
                 <div>
                   <div className="font-medium">{selectedProfile.name || '이름 없음'}</div>
-                  <div className="text-xs text-muted-foreground">레벨 {selectedProfile.level} · 연속 {selectedProfile.streak_days}일 · 평점 {Number(selectedProfile.rating).toFixed(1)}</div>
+                  <div className="text-xs text-muted-foreground">평점 {Number(selectedProfile.rating).toFixed(1)}</div>
                 </div>
               </div>
               {selectedProfile.bio && <p className="text-sm whitespace-pre-wrap">{selectedProfile.bio}</p>}

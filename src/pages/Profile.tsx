@@ -635,7 +635,7 @@ export default function Profile() {
           <div className="bg-white rounded-lg p-6 border border-gray-200 text-center">
             <User className="w-12 h-12 mx-auto text-gray-300 mb-4" />
             <p className="text-gray-600 mb-4">로그인이 필요합니다.</p>
-            <a href="/login" className="inline-block px-4 py-2 bg-black text-white rounded-lg text-sm">
+            <a href="/auth" className="inline-block px-4 py-2 bg-black text-white rounded-lg text-sm">
               로그인하기
             </a>
           </div>
